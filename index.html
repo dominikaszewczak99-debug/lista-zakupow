@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover">
+
+<!-- ============ L O G O   S T R O N Y ============ -->
+<!-- Ikona na pasku przeglądarki (favicon) -->
+<link rel="icon" type="image/png" sizes="32x32" href="logo.png">
+<link rel="icon" type="image/png" sizes="16x16" href="logo.png">
+
+<!-- Ikona dla Apple iPhone/iPad (dodanie do ekranu głównego) -->
+<link rel="apple-touch-icon" sizes="180x180" href="logo.png">
+
+<!-- Manifest dla Androida (dodanie do ekranu głównego) -->
+<link rel="manifest" href="data:application/manifest+json,{
+  'name':'Wspólna lista zakupów',
+  'short_name':'Zakupy',
+  'start_url':'.',
+  'display':'standalone',
+  'background_color':'#1e1e1e',
+  'theme_color':'#4CAF50',
+  'icons':[
+    {
+      'src':'logo.png',
+      'sizes':'72x72',
+      'type':'image/png'
+    },
+    {
+      'src':'logo.png',
+      'sizes':'144x144',
+      'type':'image/png'
+    }
+  ]
+}">
+
+<!-- Kolory dla paska adresu i ekranu startowego -->
+<meta name="theme-color" content="#4CAF50">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Zakupy">
+
+<title>🛒 Wspólna lista zakupów</title>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
+<style>
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: 'Segoe UI', Arial, system-ui;
+  background: #1e1e1e;
+  color: #eee;
+  padding: 20px;
+  margin: 0;
+}
+
+.container {
+  max-width: 600px;
+  margin: auto;
+  background: #2a2a2a;
+  padding: 20px;
+  border-radius: 24px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+}
+
+h1 {
+  font-size: 1.8rem;
+  text-align: center;
+  margin-top: 0;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.status-badge {
+  font-size: 0.8rem;
+  background: #3a3a3a;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-weight: normal;
+}
+
+.status-badge.online {
+  background: #4CAF50;
+  color: white;
+}
+
+input, select, button {
+  padding: 12px;
+  margin: 5px 0;
+  width: 100%;
+  border-radius: 12px;
+  border: none;
+  font-size: 16px;
+}
+
+input, select {
+  background: #3a3a3a;
+  color: white;
+}
+
+input::placeholder {
+  color: #aaa;
+}
+
+button {
+  background: #4CAF50;
+  color: white;
+  cursor: pointer;
+  font-weight: bold;
+  transition: all 0.2s;
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+.button-group {
+  display: flex;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.button-group button {
+  flex: 1;
+  margin: 0;
+}
+
+.suggestions {
+  background: #333;
+  border-radius: 12px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.suggestions div {
+  padding: 10px;
+  cursor: pointer;
+  border-bottom: 1px solid #444;
+}
+
+.suggestions div:hover {
+  background: #555;
+}
+
+.category {
+  margin-top: 20px;
+}
+
+.category h3 {
+  border-bottom: 1px solid #444;
+  padding-bottom: 5px;
+  font-size: 1.1rem;
+}
+
+.item-wrapper {
+  position: relative;
+  margin-bottom: 6px;
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #2a2a2a;
+  border-radius: 12px;
+  transition: transform 0.2s ease;
+  cursor: grab;
+}
+
+.item.swiping {
+  cursor: grabbing;
+}
+
+.swipe-delete-btn {
+  position: absolute;
+  right: -80px;
+  top: 0;
+  bottom: 0;
+  width: 80px;
+  background: #ff4444;
+  color: white;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: right 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.item input[type="checkbox"] {
+  display: none;
+}
+
+.checkbox {
+  width: 24px;
+  height: 24px;
+  border: 2px solid #888;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: 0.2s;
+  background: #2a2a2a;
+}
+
+.checkbox::after {
+  content: "✓";
+  font-size: 16px;
+  color: white;
+  opacity: 0;
+  transform: scale(0.5);
+  transition: 0.2s;
+}
+
+input[type="checkbox"]:checked + .checkbox {
+  background: #4CAF50;
+  border-color: #4CAF50;
+}
+
+input[type="checkbox"]:checked + .checkbox::after {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.item span {
+  flex: 1;
+  text-align: left;
+  word-break: break-word;
+  line-height: 1.4;
+  font-size: 16px;
+}
+
+.item .product-name {
+  font-weight: 500;
+}
+
+.item .product-qty {
+  color: #aaa;
+  font-size: 0.9em;
+  margin-left: 6px;
+}
+
+.checked {
+  text-decoration: line-through;
+  color: #888;
+}
+
+.delete-btn {
+  background: transparent;
+  border: none;
+  font-size: 20px;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #888;
+  transition: 0.2s;
+  flex-shrink: 0;
+  border-radius: 8px;
+}
+
+.delete-btn:hover {
+  background: #3a3a3a;
+  color: #ff4d4d;
+}
+
+.undo-bar {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #333;
+  color: white;
+  padding: 12px 20px;
+  border-radius: 40px;
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  z-index: 1000;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  font-size: 14px;
+  backdrop-filter: blur(10px);
+  background: rgba(40,40,40,0.95);
+}
+
+.undo-bar button {
+  background: #4CAF50;
+  border: none;
+  padding: 6px 16px;
+  margin: 0;
+  width: auto;
+  border-radius: 30px;
+  font-size: 14px;
+}
+
+.loading {
+  text-align: center;
+  padding: 40px;
+  color: #888;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+<h1>
+  🛒 Wspólna lista 
+  <span class="status-badge" id="statusBadge">Łączenie...</span>
+</h1>
+
+<input id="productInput" placeholder="Wpisz produkt" autocomplete="off" oninput="showSuggestions()">
+<div id="suggestions" class="suggestions"></div>
+
+<input id="quantityInput" placeholder="Ilość (opcjonalnie)" autocomplete="off">
+
+<select id="categorySelect">
+  <option value="🥦 Owoce i warzywa">🥦 Owoce i warzywa</option>
+  <option value="🥛 Nabiał">🥛 Nabiał</option>
+  <option value="🍞 Pieczywo">🍞 Pieczywo</option>
+  <option value="🥩 Mięso">🥩 Mięso</option>
+  <option value="🧴 Chemia">🧴 Chemia</option>
+  <option value="🍺 Alkohole">🍺 Alkohole</option>
+  <option value="🥤 Napoje">🥤 Napoje</option>
+  <option value="🧴 Drogeria">🧴 Drogeria</option>
+  <option value="📦 Inne">📦 Inne</option>
+</select>
+
+<div class="button-group">
+  <button onclick="addProduct()">➕ Dodaj</button>
+  <button onclick="clearAllProducts()" style="background: #ff4444;">🗑️ Zakończ zakupy</button>
+</div>
+
+<div id="list">
+  <div class="loading">✨ Dodajcie pierwsze produkty!</div>
+</div>
+</div>
+
+<script>
+// 🔥 TWOJE DANE Z FIREBASE 🔥
+const firebaseConfig = {
+  apiKey: "TU WPISZ API KEY",
+  authDomain: "TU WPISZ AUTH DOMAIN",
+  databaseURL: "https://listazakupow-5dc8f-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "TU WPISZ PROJECT ID",
+  storageBucket: "TU WPISZ STORAGE BUCKET",
+  messagingSenderId: "TU WPISZ SENDER ID",
+  appId: "TU WPISZ APP ID"
+};
+
+firebase.initializeApp(firebaseConfig);
+const database = firebase.database();
+
+let products = [];
+let history = JSON.parse(localStorage.getItem("shoppingHistory")) || [];
+let deletedProduct = null;
+let undoTimeout = null;
+
+const statusBadge = document.getElementById("statusBadge");
+database.ref(".info/connected").on("value", (snap) => {
+  if (snap.val() === true) {
+    statusBadge.innerHTML = "🟢 Online";
+    statusBadge.className = "status-badge online";
+  } else {
+    statusBadge.innerHTML = "⚫ Offline";
+    statusBadge.className = "status-badge";
+  }
+});
+
+function loadProductsFromFirebase() {
+  database.ref("products").on("value", (snapshot) => {
+    const data = snapshot.val();
+    if (data && typeof data === 'object') {
+      products = Object.keys(data).map(key => ({ firebaseId: key, ...data[key] }));
+    } else {
+      products = [];
+    }
+    render();
+  });
+}
+
+function addProduct() {
+  const name = document.getElementById("productInput").value.trim();
+  const qty = document.getElementById("quantityInput").value.trim();
+  const category = document.getElementById("categorySelect").value;
+  
+  if (!name) return alert("Wpisz nazwę produktu!");
+  if (products.find(p => p.name?.toLowerCase() === name.toLowerCase())) return alert("Ten produkt już jest!");
+  
+  database.ref("products").push({
+    name, qty: qty || "", category, checked: false, timestamp: Date.now()
+  }).then(() => {
+    if (!history.includes(name)) {
+      history.push(name);
+      localStorage.setItem("shoppingHistory", JSON.stringify(history));
+    }
+    document.getElementById("productInput").value = "";
+    document.getElementById("quantityInput").value = "";
+    document.getElementById("suggestions").innerHTML = "";
+  });
+}
+
+function deleteProduct(product, elementWrapper) {
+  if (!product.firebaseId) return;
+  deletedProduct = { ...product };
+  database.ref("products/" + product.firebaseId).remove().then(() => {
+    if (elementWrapper) {
+      elementWrapper.style.transition = 'all 0.2s ease';
+      elementWrapper.style.opacity = '0';
+      elementWrapper.style.transform = 'translateX(100%)';
+      setTimeout(() => showUndoBar(product), 150);
+    } else {
+      showUndoBar(product);
+    }
+  });
+}
+
+function showUndoBar(product) {
+  const existingBar = document.querySelector('.undo-bar');
+  if (existingBar) existingBar.remove();
+  if (undoTimeout) clearTimeout(undoTimeout);
+  
+  const undoBar = document.createElement('div');
+  undoBar.className = 'undo-bar';
+  undoBar.innerHTML = `<span>🗑️ Usunięto: ${product.name}${product.qty ? ` x${product.qty}` : ''}</span><button onclick="undoDelete()">Cofnij</button>`;
+  document.body.appendChild(undoBar);
+  
+  undoTimeout = setTimeout(() => {
+    document.querySelector('.undo-bar')?.remove();
+    deletedProduct = null;
+  }, 5000);
+}
+
+function undoDelete() {
+  if (deletedProduct?.firebaseId) {
+    database.ref("products/" + deletedProduct.firebaseId).set({
+      name: deletedProduct.name,
+      qty: deletedProduct.qty || "",
+      category: deletedProduct.category,
+      checked: deletedProduct.checked || false,
+      timestamp: Date.now()
+    }).then(() => {
+      document.querySelector('.undo-bar')?.remove();
+      if (undoTimeout) clearTimeout(undoTimeout);
+      deletedProduct = null;
+    });
+  }
+}
+
+function clearAllProducts() {
+  if (products.length === 0) return alert("Lista jest pusta!");
+  if (confirm("Usunąć wszystko?")) database.ref("products").remove();
+}
+
+function toggleCheck(product) {
+  database.ref("products/" + product.firebaseId).update({ checked: !product.checked });
+}
+
+function showSuggestions() {
+  const input = document.getElementById("productInput").value.toLowerCase();
+  const box = document.getElementById("suggestions");
+  box.innerHTML = "";
+  if (!input) return;
+  history.filter(p => p.toLowerCase().startsWith(input)).slice(0, 5).forEach(p => {
+    const div = document.createElement("div");
+    div.innerText = p;
+    div.onclick = () => {
+      document.getElementById("productInput").value = p;
+      box.innerHTML = "";
+    };
+    box.appendChild(div);
+  });
+}
+
+function makeSwipeable(wrapper, product) {
+  let startX = 0, currentX = 0, isSwiping = false;
+  const item = wrapper.querySelector('.item');
+  const swipeBtn = wrapper.querySelector('.swipe-delete-btn');
+  if (!item) return;
+  
+  const handleStart = (e) => {
+    startX = e.touches ? e.touches[0].clientX : e.clientX;
+    isSwiping = true;
+    item.classList.add('swiping');
+  };
+  const handleMove = (e) => {
+    if (!isSwiping) return;
+    e.preventDefault();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    currentX = clientX - startX;
+    if (currentX < 0) {
+      const translateX = Math.max(currentX, -80);
+      item.style.transform = `translateX(${translateX}px)`;
+      if (swipeBtn) swipeBtn.style.right = `${-80 + (80 + translateX)}px`;
+    }
+  };
+  const handleEnd = () => {
+    if (!isSwiping) return;
+    isSwiping = false;
+    item.classList.remove('swiping');
+    if (currentX < -40) deleteProduct(product, wrapper);
+    else {
+      item.style.transform = '';
+      if (swipeBtn) swipeBtn.style.right = '-80px';
+    }
+    currentX = 0;
+  };
+  
+  wrapper.addEventListener('touchstart', handleStart, { passive: false });
+  wrapper.addEventListener('touchmove', handleMove, { passive: false });
+  wrapper.addEventListener('touchend', handleEnd);
+  wrapper.addEventListener('mousedown', handleStart);
+  window.addEventListener('mousemove', handleMove);
+  window.addEventListener('mouseup', handleEnd);
+}
+
+function escapeHtml(text) {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function render() {
+  const list = document.getElementById("list");
+  list.innerHTML = "";
+  if (products.length === 0) {
+    list.innerHTML = '<div class="loading">✨ Lista jest pusta!</div>';
+    return;
+  }
+  
+  const grouped = {};
+  products.forEach(p => {
+    const cat = p.category || "📦 Inne";
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(p);
+  });
+  
+  for (let cat of Object.keys(grouped).sort()) {
+    const catDiv = document.createElement("div");
+    catDiv.className = "category";
+    catDiv.innerHTML = `<h3>${cat}</h3>`;
+    
+    grouped[cat].forEach(p => {
+      const wrapper = document.createElement("div");
+      wrapper.className = "item-wrapper";
+      
+      const item = document.createElement("div");
+      item.className = "item";
+      
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = p.checked || false;
+      cb.id = `cb_${p.firebaseId}`;
+      
+      const label = document.createElement("label");
+      label.className = "checkbox";
+      label.setAttribute("for", cb.id);
+      
+      const span = document.createElement("span");
+      span.innerHTML = `<span class="product-name">${escapeHtml(p.name)}</span>${p.qty ? `<span class="product-qty">× ${escapeHtml(p.qty)}</span>` : ''}`;
+      if (p.checked) span.classList.add("checked");
+      
+      cb.onchange = () => toggleCheck(p);
+      
+      const delBtn = document.createElement("button");
+      delBtn.innerHTML = "🗑️";
+      delBtn.className = "delete-btn";
+      delBtn.onclick = (e) => {
+        e.stopPropagation();
+        deleteProduct(p, wrapper);
+      };
+      
+      item.appendChild(cb);
+      item.appendChild(label);
+      item.appendChild(span);
+      item.appendChild(delBtn);
+      
+      const swipeBtn = document.createElement("button");
+      swipeBtn.innerHTML = "🗑️ Usuń";
+      swipeBtn.className = "swipe-delete-btn";
+      swipeBtn.onclick = () => deleteProduct(p, wrapper);
+      
+      wrapper.appendChild(item);
+      wrapper.appendChild(swipeBtn);
+      catDiv.appendChild(wrapper);
+      
+      makeSwipeable(wrapper, p);
+    });
+    list.appendChild(catDiv);
+  }
+}
+
+loadProductsFromFirebase();
+console.log("🚀 Aplikacja uruchomiona!");
+</script>
+
+</body>
+</html>
